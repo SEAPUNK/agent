@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	debugHTTP    = false
-	disableDebug = false
+	debugHTTP = false
 )
 
 type APIClientConfig struct {
@@ -25,24 +24,11 @@ type APIClientConfig struct {
 	DisableHTTP2 bool
 }
 
-type APIClient struct {
-	config APIClientConfig
-	logger logger.Logger
-}
-
 func APIClientEnableHTTPDebug() {
 	debugHTTP = true
 }
 
-func APIClientDisableDebug() {
-	disableDebug = true
-}
-
 func NewAPIClient(l logger.Logger, c APIClientConfig) *api.Client {
-	if disableDebug == true && l.GetLevel() == logger.DEBUG {
-		l = l.WithLevel(logger.INFO)
-	}
-
 	u, err := url.Parse(c.Endpoint)
 	if err != nil {
 		l.Warn("Failed to parse %q: %v", c.Endpoint, err)
