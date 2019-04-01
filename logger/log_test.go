@@ -18,7 +18,8 @@ func TestConsoleLogger(t *testing.T) {
 
 	l := logger.NewConsoleLogger(printer, func(c int) {
 		exitCode = c
-	}).WithLevel(logger.INFO)
+	})
+	l.SetLevel(logger.INFO)
 
 	l.Debug("Debug %q", "llamas")
 	l.Info("Info %q", "llamas")

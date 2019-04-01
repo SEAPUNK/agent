@@ -42,7 +42,7 @@ type Logger interface {
 	Info(format string, v ...interface{})
 
 	WithFields(fields ...Field) Logger
-	WithLevel(level Level) Logger
+	SetLevel(level Level)
 	Level() Level
 }
 
@@ -69,11 +69,9 @@ func (l *ConsoleLogger) WithFields(fields ...Field) Logger {
 	return &clone
 }
 
-// WithLevel returns a copy of the logger with the provided level
-func (l *ConsoleLogger) WithLevel(level Level) Logger {
-	clone := *l
-	clone.level = level
-	return &clone
+// SetLevel sets the level in the logger
+func (l *ConsoleLogger) SetLevel(level Level) {
+	l.level = level
 }
 
 func (l *ConsoleLogger) Debug(format string, v ...interface{}) {
@@ -120,6 +118,9 @@ type Printer interface {
 type TextPrinter struct {
 	Colors bool
 	Writer io.Writer
+
+	IsPrefixFn  func(Field) bool
+	IsVisibleFn func(Field) bool
 }
 
 func NewTextPrinter(w io.Writer) *TextPrinter {
@@ -133,7 +134,21 @@ func (l *TextPrinter) Print(level Level, msg string, fields Fields) {
 	now := time.Now().Format(DateFormat)
 
 	var line string
+	var prefix string
 	var fieldStrs []string
+
+	if l.IsPrefixFn != nil {
+		for _, f := range fields {
+			// Skip invisible fields
+			if l.IsVisibleFn != nil && !l.IsVisibleFn(f) {
+				continue
+			}
+			// Allow some fields to be shown as prefixes
+			if l.IsPrefixFn(f) {
+				prefix += f.String()
+			}
+		}
+	}
 
 	if l.Colors {
 		levelColor := green
@@ -155,18 +170,36 @@ func (l *TextPrinter) Print(level Level, msg string, fields Fields) {
 			messageColor = red
 		}
 
-		line = fmt.Sprintf("\x1b[%sm%s %-6s\x1b[0m \x1b[%sm%s\x1b[0m",
-			levelColor, now, level, messageColor, msg)
+		if prefix != "" {
+			line = fmt.Sprintf("\x1b[%sm%s %-6s\x1b[0m \x1b[%sm%s\x1b[0m \x1b[%sm%s\x1b[0m",
+				levelColor, now, level, lightgray, prefix, messageColor, msg)
+		} else {
+			line = fmt.Sprintf("\x1b[%sm%s %-6s\x1b[0m \x1b[%sm%s\x1b[0m",
+				levelColor, now, level, messageColor, msg)
+		}
 
 		for _, field := range fields {
+			if l.IsVisibleFn != nil && !l.IsVisibleFn(field) {
+				continue
+			}
+			if l.IsPrefixFn != nil && l.IsPrefixFn(field) {
+				continue
+			}
 			fieldStrs = append(fieldStrs, fmt.Sprintf("\x1b[%sm%s=\x1b[0m\x1b[%sm%s\x1b[0m",
 				fieldColor, field.Key(), messageColor, field.String()))
 		}
 	} else {
-		line = fmt.Sprintf("%s %-6s %s", now, level, msg)
+		if prefix != "" {
+			line = fmt.Sprintf("%s %-6s %s %s", now, level, prefix, msg)
+		} else {
+			line = fmt.Sprintf("%s %-6s %s", now, level, msg)
+		}
 
 		for _, field := range fields {
-			if field.Key() == `agent_name` {
+			if l.IsVisibleFn != nil && !l.IsVisibleFn(field) {
+				continue
+			}
+			if l.IsPrefixFn != nil && l.IsPrefixFn(field) {
 				continue
 			}
 			fieldStrs = append(fieldStrs, fmt.Sprintf("%s=%s", field.Key(), field.String()))
